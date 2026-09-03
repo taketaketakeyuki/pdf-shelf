@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Shelf">
+<meta name="theme-color" content="#f6f4f0">
+<title>PDF Shelf</title>
+<style>
+  :root{
+    --bg:#f6f4f0; --panel:#ffffff; --ink:#1c1b19; --sub:#6f6a63;
+    --line:#e2ddd5; --accent:#2f6b4f; --accent-ink:#ffffff;
+    --shadow:0 1px 2px rgba(0,0,0,.10), 0 6px 14px rgba(0,0,0,.10);
+    --cover-w:118px; --gap:10px; --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#15161a; --panel:#1e2026; --ink:#f0eee9; --sub:#9a958d;
+      --line:#2e313a; --accent:#69b98f; --accent-ink:#10231a;
+      --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 20px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15161a; --panel:#1e2026; --ink:#f0eee9; --sub:#9a958d;
+    --line:#2e313a; --accent:#69b98f; --accent-ink:#10231a;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 20px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    overscroll-behavior-y:none;
+  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input,select{font:inherit;color:inherit}
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky; top:0; z-index:30; background:color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter:saturate(180%) blur(14px); -webkit-backdrop-filter:saturate(180%) blur(14px);
+    border-bottom:1px solid var(--line); padding:env(safe-area-inset-top) 0 0;
+  }
+  .bar{display:flex; align-items:center; gap:8px; padding:8px 14px}
+  .title{font-weight:650; letter-spacing:.01em; font-size:16px; margin-right:auto; display:flex; align-items:center; gap:8px; min-width:0}
+  .title span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .iconbtn{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;color:var(--sub)}
+  .iconbtn:active{background:var(--line)}
+  .iconbtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .crumbs{display:flex; gap:4px; align-items:center; overflow-x:auto; padding:0 14px 8px; font-size:13px; color:var(--sub); scrollbar-width:none}
+  .crumbs::-webkit-scrollbar{display:none}
+  .crumbs button{white-space:nowrap; padding:3px 7px; border-radius:6px; background:var(--panel); border:1px solid var(--line)}
+  .crumbs .sep{opacity:.45}
+  .toolrow{display:flex; gap:8px; padding:0 14px 10px; align-items:center}
+  .search{flex:1; display:flex; align-items:center; gap:7px; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:7px 10px}
+  .search input{border:0;background:none;outline:none;width:100%;font-size:15px}
+  .search svg{width:16px;height:16px;stroke:var(--sub);fill:none;stroke-width:1.9;flex:none}
+  select.mini{background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:7px 8px; font-size:13px}
+
+  /* ---------- shelf ---------- */
+  main{padding:12px 14px calc(28px + env(safe-area-inset-bottom))}
+  .grid{
+    display:grid; gap:var(--gap);
+    grid-template-columns:repeat(auto-fill, minmax(var(--cover-w), 1fr));
+    align-items:start;
+  }
+  .cell{display:flex; flex-direction:column; gap:5px; text-align:left; padding:0}
+  .cover{
+    position:relative; width:100%; aspect-ratio:1/1.414; border-radius:var(--radius);
+    background:var(--panel); box-shadow:var(--shadow); overflow:hidden;
+    display:grid; place-items:center; transition:transform .12s ease;
+  }
+  .cell:active .cover{transform:scale(.965)}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block}
+  .cover .ph{font-size:11px;color:var(--sub);padding:8px;text-align:center;line-height:1.35;word-break:break-all;
+    display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+  .cover.folder{aspect-ratio:1/0.78; background:linear-gradient(160deg, color-mix(in srgb,var(--accent) 22%, var(--panel)), var(--panel));
+    display:flex; align-items:flex-end; padding:9px}
+  .cover.folder svg{width:26px;height:26px;stroke:var(--accent);fill:none;stroke-width:1.7;stroke-linejoin:round}
+  .cover .spin{width:18px;height:18px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .nm{font-size:11.5px; line-height:1.3; height:2.6em; color:var(--ink); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word}
+  .sb{font-size:10.5px; line-height:1.35; height:1.35em; color:var(--sub); overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+  .sectionlabel{font-size:12px;color:var(--sub);margin:18px 2px 8px;font-weight:600;letter-spacing:.03em}
+  .sectionlabel:first-child{margin-top:2px}
+  .empty{padding:56px 20px; text-align:center; color:var(--sub); font-size:14px}
+
+  /* ---------- sheets / modals ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:60;opacity:0;pointer-events:none;transition:opacity .18s}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--panel);
+    border-radius:16px 16px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.28);
+    transform:translateY(102%); transition:transform .22s cubic-bezier(.32,.72,0,1);
+    padding:10px 16px calc(18px + env(safe-area-inset-bottom)); max-height:88vh; overflow:auto;
+  }
+  .sheet.on{transform:none}
+  @media (min-width:700px){
+    .sheet{left:50%; right:auto; bottom:auto; top:50%; width:520px; max-width:92vw; border-radius:16px;
+      transform:translate(-50%,-46%) scale(.97); opacity:0; transition:opacity .16s, transform .16s}
+    .sheet.on{transform:translate(-50%,-50%); opacity:1}
+  }
+  .grip{width:38px;height:4px;border-radius:2px;background:var(--line);margin:2px auto 12px}
+  @media (min-width:700px){.grip{display:none}}
+  .sheet h2{font-size:16px;margin:0 0 4px;line-height:1.35;word-break:break-word}
+  .sheet .meta{font-size:12.5px;color:var(--sub);margin-bottom:14px}
+  .act{display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;border-radius:11px;border:1px solid var(--line);margin-bottom:8px;background:var(--bg);text-align:left}
+  .act:disabled{opacity:.45}
+  .act>span:last-child{min-width:0;flex:1}
+  .act .ai{width:30px;height:30px;border-radius:8px;background:var(--panel);display:grid;place-items:center;flex:none;border:1px solid var(--line)}
+  .act .ai svg{width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .act .at{display:block;font-size:14.5px;font-weight:600;line-height:1.35}
+  .act .as{display:block;font-size:11.5px;color:var(--sub);margin-top:2px;line-height:1.4}
+  .act.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .act.primary .ai{background:rgba(255,255,255,.16);border-color:transparent}
+  .act.primary .ai svg{stroke:var(--accent-ink)}
+  .act.primary .as{color:color-mix(in srgb,var(--accent-ink) 75%, transparent)}
+  .prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:2px 0 12px}
+  .prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+  /* ---------- settings ---------- */
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;color:var(--sub);margin-bottom:5px;font-weight:600}
+  .field input[type=text],.field select{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);outline:none}
+  .field .hint{font-size:11.5px;color:var(--sub);margin-top:5px;line-height:1.5}
+  .copybox{display:flex;gap:6px;align-items:center}
+  .copybox code{flex:1;font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;overflow:auto;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .btn{padding:10px 14px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:14px}
+  .btn.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line);font-weight:500}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{flex:1;padding:9px 6px;font-size:13px;background:var(--bg)}
+  .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+  .note{font-size:12px;color:var(--sub);line-height:1.65;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-top:10px}
+
+  /* ---------- reader ---------- */
+  #reader{position:fixed;inset:0;z-index:80;background:#2a2a2e;display:none;flex-direction:column}
+  #reader.on{display:flex}
+  #reader .rbar{display:flex;align-items:center;gap:6px;padding:calc(6px + env(safe-area-inset-top)) 10px 6px;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(10px)}
+  #reader .rbar .rt{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #reader .rbar .iconbtn{color:#fff}
+  #rpages{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px 0 30px;text-align:center}
+  #rpages canvas{max-width:min(100%, 900px);width:100%;height:auto;display:block;margin:0 auto 10px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+    background:#000c;color:#fff;padding:10px 16px;border-radius:20px;font-size:13px;z-index:200;opacity:0;transition:.2s;pointer-events:none;max-width:86vw;text-align:center}
+  .toast.on{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <button class="iconbtn" id="btnUp" hidden aria-label="上へ">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="title"><span id="hTitle">PDF Shelf</span></div>
+    <button class="iconbtn" id="btnReload" aria-label="再読み込み">
+      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+    </button>
+    <button class="iconbtn" id="btnSettings" aria-label="設定">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+  <div class="crumbs" id="crumbs"></div>
+  <div class="toolrow">
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+      <input id="q" type="search" placeholder="このフォルダ内を検索" autocomplete="off">
+    </div>
+    <select class="mini" id="sort">
+      <option value="name">名前順</option>
+      <option value="new">新しい順</option>
+      <option value="old">古い順</option>
+      <option value="size">サイズ順</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <div id="content"></div>
+</main>
+
+<!-- ============ file action sheet ============ -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="fileSheet" role="dialog" aria-modal="true">
+  <div class="grip"></div>
+  <h2 id="fsName"></h2>
+  <div class="meta" id="fsMeta"></div>
+  <div class="prog"><i id="fsProg"></i></div>
+  <button class="act primary" id="aShare">
+    <span class="ai"><svg viewBox="0 0 24 24"><path d="M12 16V3"/><path d="M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span>
+    <span><span class="at">GoodNotesへ送る</span><span class="as" id="aShareSub">共有シートから「GoodNotes」を選択</span></span>
+  </button>
+  <button class="act" id="aEdge">
+    <span class="ai"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></span>
+    <span><span class="at">Edgeで開く</span><span class="as">Microsoft Edge に一時リンクを渡す</span></span>
+  </button>
+  <button class="act" id="aRead">
+    <span class="ai"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5z"/></svg></span>
+    <span><span class="at">このアプリで読む</span><span class="as">外部アプリを開かずその場で閲覧</span></span>
+  </button>
+  <button class="act" id="aSafari">
+    <span class="ai"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></span>
+    <span><span class="at">Safariの新規タブで開く</span><span class="as">共有シートからでもGoodNotesへ送れます</span></span>
+  </button>
+</div>
+
+<!-- ============ settings sheet ============ -->
+<div class="sheet" id="setSheet" role="dialog" aria-modal="true">
+  <div class="grip"></div>
+  <h2>設定</h2>
+  <div class="meta" id="acctLine">未接続</div>
+
+  <div class="field">
+    <label>Dropbox アプリキー (App key)</label>
+    <input id="fKey" type="text" inputmode="latin" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="例: a1b2c3d4e5f6g7h">
+    <div class="hint">Dropbox App Console で作成したアプリの App key。Secret は不要です（PKCE方式）。</div>
+  </div>
+
+  <div class="field">
+    <label>リダイレクトURI（App Console にそのまま登録）</label>
+    <div class="copybox"><code id="fRedirect"></code><button class="btn ghost" id="btnCopy">コピー</button></div>
+  </div>
+
+  <div class="field">
+    <label>本棚のルートフォルダ</label>
+    <input id="fRoot" type="text" placeholder="/書籍　（空欄ならDropbox全体）">
+    <div class="hint">先頭に / を付けたパス。空欄にするとDropboxのルートから表示します。</div>
+  </div>
+
+  <div class="field">
+    <label>表紙の大きさ</label>
+    <div class="seg" id="segDensity">
+      <button data-v="92">小（ぎっしり）</button>
+      <button data-v="118">中</button>
+      <button data-v="148">大</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>表紙をタップしたときの動作</label>
+    <div class="seg" id="segTap">
+      <button data-v="sheet">メニューを出す</button>
+      <button data-v="share">すぐ共有シート</button>
+      <button data-v="read">すぐアプリ内で読む</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>テーマ</label>
+    <div class="seg" id="segTheme">
+      <button data-v="auto">自動</button>
+      <button data-v="light">ライト</button>
+      <button data-v="dark">ダーク</button>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:6px">
+    <button class="btn" id="btnConnect">Dropboxに接続</button>
+    <button class="btn ghost" id="btnSave">保存して閉じる</button>
+    <button class="btn ghost" id="btnClearCache">表紙キャッシュを消す</button>
+    <button class="btn ghost" id="btnLogout">切断</button>
+  </div>
+
+  <div class="note">
+    <b>初回セットアップ</b><br>
+    ① <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a> で「Create app」→ Scoped access → Full Dropbox（またはApp folder）→ 名前を付けて作成<br>
+    ② Settings タブの「Redirect URIs」に上のURIを貼って Add<br>
+    ③ Permissions タブで <code>files.metadata.read</code> / <code>files.content.read</code> / <code>account_info.read</code> にチェック → Submit<br>
+    ④ App key をここに貼って「Dropboxに接続」
+  </div>
+</div>
+
+<!-- ============ reader ============ -->
+<div id="reader">
+  <div class="rbar">
+    <button class="iconbtn" id="rClose" aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <div class="rt" id="rTitle"></div>
+    <div class="rt" style="flex:none;font-size:12px;opacity:.8" id="rPageInfo"></div>
+  </div>
+  <div id="rpages"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* =======================================================================
+   PDF Shelf — Dropbox × iPad bookshelf
+   完全クライアントサイド。サーバー不要。単一HTML。
+   ======================================================================= */
+(function(){
+"use strict";
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+/* ----------------------------- tiny helpers ---------------------------- */
+const $  = (s)=>document.querySelector(s);
+const el = (t,c)=>{const e=document.createElement(t); if(c)e.className=c; return e;};
+const fmtSize = (b)=> b<1024?b+" B": b<1048576?(b/1024).toFixed(0)+" KB": (b/1048576).toFixed(1)+" MB";
+const fmtDate = (s)=>{ try{const d=new Date(s); return d.getFullYear()+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getDate()).padStart(2,"0");}catch(e){return "";} };
+let toastTimer=null;
+function toast(msg, ms){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"), ms||2600);
+}
+
+/* ------------------------------ settings ------------------------------- */
+const CFG_KEY="pdfshelf.cfg.v1", TOK_KEY="pdfshelf.tok.v1";
+const defCfg={ appKey:"", root:"", density:118, tap:"sheet", theme:"auto", sort:"name" };
+let cfg = Object.assign({}, defCfg, readJson(CFG_KEY) || {});
+let tok = readJson(TOK_KEY) || { access:null, exp:0, refresh:null };
+
+function readJson(k){ try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
+function writeJson(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function saveCfg(){ writeJson(CFG_KEY, cfg); applyCfg(); }
+function saveTok(){ writeJson(TOK_KEY, tok); }
+
+function applyCfg(){
+  document.documentElement.style.setProperty("--cover-w", cfg.density+"px");
+  document.documentElement.style.setProperty("--gap", (cfg.density<100?8:cfg.density<140?10:12)+"px");
+  if(cfg.theme==="auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", cfg.theme);
+  $("#sort").value = cfg.sort;
+}
+
+function redirectUri(){ return location.origin + location.pathname; }
+
+/* ------------------------------- OAuth --------------------------------- */
+function randStr(n){
+  const a=new Uint8Array(n); crypto.getRandomValues(a);
+  const cs="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  let s=""; for(let i=0;i<n;i++) s+=cs[a[i]%cs.length]; return s;
+}
+function b64url(buf){
+  let s=""; const b=new Uint8Array(buf);
+  for(let i=0;i<b.length;i++) s+=String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function beginAuth(){
+  if(!cfg.appKey){ toast("先に App key を入力してください"); return; }
+  const verifier = randStr(64);
+  sessionStorage.setItem("pdfshelf.verifier", verifier);
+  localStorage.setItem("pdfshelf.verifier", verifier); // standaloneでsessionが飛ぶ端末向けの保険
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  const u = new URL("https://www.dropbox.com/oauth2/authorize");
+  u.searchParams.set("client_id", cfg.appKey);
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("code_challenge", challenge);
+  u.searchParams.set("code_challenge_method", "S256");
+  u.searchParams.set("redirect_uri", redirectUri());
+  u.searchParams.set("token_access_type", "offline");
+  location.href = u.toString();
+}
+async function exchangeCode(code){
+  const verifier = sessionStorage.getItem("pdfshelf.verifier") || localStorage.getItem("pdfshelf.verifier");
+  if(!verifier) throw new Error("認証情報が見つかりません。もう一度接続してください。");
+  const body = new URLSearchParams({
+    code, grant_type:"authorization_code", client_id:cfg.appKey,
+    code_verifier:verifier, redirect_uri:redirectUri()
+  });
+  const r = await fetch("https://api.dropboxapi.com/oauth2/token",{
+    method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body
+  });
+  if(!r.ok) throw new Error("トークン取得に失敗: "+r.status+" "+(await r.text()));
+  const j = await r.json();
+  tok = { access:j.access_token, exp:Date.now()+(j.expires_in||14400)*1000-60000, refresh:j.refresh_token||tok.refresh };
+  saveTok();
+  sessionStorage.removeItem("pdfshelf.verifier");
+  localStorage.removeItem("pdfshelf.verifier");
+}
+async function refreshAccess(){
+  if(!tok.refresh) throw new Error("NEED_AUTH");
+  const body = new URLSearchParams({ grant_type:"refresh_token", refresh_token:tok.refresh, client_id:cfg.appKey });
+  const r = await fetch("https://api.dropboxapi.com/oauth2/token",{
+    method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body
+  });
+  if(!r.ok){ tok={access:null,exp:0,refresh:null}; saveTok(); throw new Error("NEED_AUTH"); }
+  const j = await r.json();
+  tok.access = j.access_token; tok.exp = Date.now()+(j.expires_in||14400)*1000-60000;
+  saveTok();
+}
+async function accessToken(){
+  if(tok.access && Date.now() < tok.exp) return tok.access;
+  await refreshAccess();
+  return tok.access;
+}
+function isAuthed(){ return !!(tok.access || tok.refresh); }
+
+/* ------------------------------ Dropbox API ---------------------------- */
+// Dropbox-API-Arg ヘッダーは ASCII のみ。日本語ファイル名を \uXXXX にエスケープする。
+function hdrJson(o){
+  return JSON.stringify(o).replace(/[^\x20-\x7E]/g,
+    (c)=>"\\u"+c.charCodeAt(0).toString(16).padStart(4,"0"));
+}
+async function rpc(endpoint, body){
+  const t = await accessToken();
+  const r = await fetch("https://api.dropboxapi.com/2/"+endpoint,{
+    method:"POST",
+    headers:{ "Authorization":"Bearer "+t, "Content-Type":"application/json" },
+    body: JSON.stringify(body===undefined?null:body)
+  });
+  if(r.status===401){ tok.access=null; saveTok(); throw new Error("NEED_AUTH"); }
+  if(!r.ok) throw new Error(endpoint+" 失敗 ("+r.status+"): "+(await r.text()).slice(0,300));
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
+}
+async function contentGet(endpoint, arg){
+  const t = await accessToken();
+  const r = await fetch("https://content.dropboxapi.com/2/"+endpoint,{
+    method:"POST",
+    headers:{ "Authorization":"Bearer "+t, "Dropbox-API-Arg": hdrJson(arg) }
+  });
+  if(r.status===401){ tok.access=null; saveTok(); throw new Error("NEED_AUTH"); }
+  if(!r.ok) throw new Error(endpoint+" 失敗 ("+r.status+")");
+  return r;
+}
+async function listFolder(path){
+  let out=[], res = await rpc("files/list_folder",{
+    path: path||"", recursive:false, limit:2000,
+    include_media_info:false, include_deleted:false, include_non_downloadable_files:false
+  });
+  out = out.concat(res.entries);
+  while(res.has_more){
+    res = await rpc("files/list_folder/continue", { cursor: res.cursor });
+    out = out.concat(res.entries);
+  }
+  return out;
+}
+async function tempLink(path){
+  const j = await rpc("files/get_temporary_link", { path });
+  return j.link;
+}
+async function downloadBlob(path, onProgress){
+  const r = await contentGet("files/download", { path });
+  const total = Number(r.headers.get("content-length")||0);
+  if(!r.body || !total || !onProgress) return await r.blob();
+  const reader = r.body.getReader(); const chunks=[]; let got=0;
+  for(;;){
+    const {done, value} = await reader.read();
+    if(done) break;
+    chunks.push(value); got += value.length;
+    onProgress(got/total);
+  }
+  return new Blob(chunks, {type:"application/pdf"});
+}
+
+/* ------------------------------ IndexedDB ------------------------------ */
+let dbp=null;
+function db(){
+  if(dbp) return dbp;
+  dbp = new Promise((res,rej)=>{
+    const rq = indexedDB.open("pdfshelf", 1);
+    rq.onupgradeneeded = ()=>{ const d=rq.result; if(!d.objectStoreNames.contains("thumbs")) d.createObjectStore("thumbs"); };
+    rq.onsuccess = ()=>res(rq.result);
+    rq.onerror  = ()=>rej(rq.error);
+  }).catch(()=>null);
+  return dbp;
+}
+async function idbGet(k){
+  const d = await db(); if(!d) return null;
+  return new Promise((res)=>{ try{
+    const rq = d.transaction("thumbs","readonly").objectStore("thumbs").get(k);
+    rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null);
+  }catch(e){res(null);} });
+}
+async function idbPut(k,v){
+  const d = await db(); if(!d) return;
+  try{ d.transaction("thumbs","readwrite").objectStore("thumbs").put(v,k); }catch(e){}
+}
+async function idbClear(){
+  const d = await db(); if(!d) return;
+  try{ d.transaction("thumbs","readwrite").objectStore("thumbs").clear(); }catch(e){}
+}
+
+/* --------------------------- thumbnail pipeline ------------------------ */
+// ① Dropbox の get_thumbnail_v2（PDFは非公式サポートなので失敗しうる）
+// ② pdf.js で1ページ目を描画（一時リンク経由の部分読み込み → 全ダウンロードの順に試す）
+async function dropboxThumb(path){
+  try{
+    const r = await contentGet("files/get_thumbnail_v2", {
+      resource:{ ".tag":"path", path }, format:"jpeg", size:"w256h256", mode:"strict"
+    });
+    const b = await r.blob();
+    return (b && b.size > 900) ? b : null;   // 極小レスポンスは失敗扱い
+  }catch(e){ return null; }
+}
+async function renderFirstPage(path){
+  if(!window.pdfjsLib) return null;
+  let doc=null;
+  try{
+    const link = await tempLink(path);
+    doc = await pdfjsLib.getDocument({
+      url: link, disableAutoFetch:true, disableStream:false, rangeChunkSize:65536,
+      isEvalSupported:false
+    }).promise;
+  }catch(e){
+    try{
+      const blob = await downloadBlob(path);
+      doc = await pdfjsLib.getDocument({ data: await blob.arrayBuffer(), isEvalSupported:false }).promise;
+    }catch(e2){ return null; }
+  }
+  try{
+    const page = await doc.getPage(1);
+    const base = page.getViewport({scale:1});
+    const scale = 380 / base.width;
+    const vp = page.getViewport({scale});
+    const cv = document.createElement("canvas");
+    cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+    await page.render({canvasContext:ctx, viewport:vp}).promise;
+    const blob = await new Promise((res)=>cv.toBlob(res,"image/jpeg",0.82));
+    try{ doc.destroy(); }catch(e){}
+    return blob;
+  }catch(e){ try{doc && doc.destroy();}catch(e2){} return null; }
+}
+async function getThumb(entry){
+  const key = entry.path_lower + "@" + (entry.rev||entry.content_hash||"");
+  const cached = await idbGet(key);
+  if(cached) return cached;
+  let blob = await dropboxThumb(entry.path_lower);
+  if(!blob) blob = await renderFirstPage(entry.path_lower);
+  if(blob) idbPut(key, blob);
+  return blob;
+}
+
+/* thumbnail work queue (同時実行を絞ってiPadを詰まらせない) */
+const queue=[]; let running=0; const MAX=2;
+function enqueue(fn){ queue.push(fn); pump(); }
+function pump(){
+  while(running<MAX && queue.length){
+    const fn = queue.shift(); running++;
+    Promise.resolve().then(fn).catch(()=>{}).then(()=>{ running--; pump(); });
+  }
+}
+function resetQueue(){ queue.length=0; }
+
+/* ------------------------------ navigation ----------------------------- */
+let curPath = null;       // 現在のDropboxパス（"" = ルート）
+let curEntries = [];
+let observer = null;
+
+function rootPath(){
+  let p = (cfg.root||"").trim();
+  if(p==="/"||p==="") return "";
+  if(!p.startsWith("/")) p = "/"+p;
+  return p.replace(/\/+$/,"");
+}
+function baseName(p){ const i=p.lastIndexOf("/"); return i<0?p:p.slice(i+1); }
+function stripExt(n){ return n.replace(/\.pdf$/i,""); }
+
+async function navigate(path, push){
+  curPath = path;
+  if(push!==false){
+    const h = "#" + encodeURIComponent(path);
+    if(location.hash !== h) history.pushState({path}, "", h);
+  }
+  $("#btnUp").hidden = (path === rootPath());
+  $("#hTitle").textContent = path===rootPath() ? (baseName(path)||"PDF Shelf") : baseName(path);
+  renderCrumbs();
+  $("#content").innerHTML = '<div class="empty">読み込み中…</div>';
+  resetQueue();
+  try{
+    curEntries = await listFolder(path);
+    render();
+  }catch(e){
+    if(String(e.message).indexOf("NEED_AUTH")>=0){ showAuthWall(); return; }
+    $("#content").innerHTML = '<div class="empty">読み込めませんでした。<br>'+escapeHtml(e.message)+'</div>';
+  }
+}
+function renderCrumbs(){
+  const c=$("#crumbs"); c.innerHTML="";
+  const root = rootPath();
+  const rel = curPath.slice(root.length).split("/").filter(Boolean);
+  const mk=(label,p)=>{ const b=el("button"); b.textContent=label; b.onclick=()=>navigate(p); c.appendChild(b); };
+  mk(root ? baseName(root) : "Dropbox", root);
+  let acc = root;
+  rel.forEach((seg)=>{
+    const s=el("span","sep"); s.textContent="›"; c.appendChild(s);
+    acc = acc + "/" + seg; mk(seg, acc);
+  });
+  c.scrollLeft = c.scrollWidth;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+/* -------------------------------- render ------------------------------- */
+function render(){
+  const q = $("#q").value.trim().toLowerCase();
+  const folders = curEntries.filter(e=>e[".tag"]==="folder");
+  let files = curEntries.filter(e=>e[".tag"]==="file" && /\.pdf$/i.test(e.name));
+
+  const fFolders = q ? folders.filter(f=>f.name.toLowerCase().includes(q)) : folders;
+  if(q) files = files.filter(f=>f.name.toLowerCase().includes(q));
+
+  const s = cfg.sort;
+  const byName=(a,b)=>a.name.localeCompare(b.name,"ja");
+  fFolders.sort(byName);
+  files.sort((a,b)=>{
+    if(s==="new") return new Date(b.client_modified)-new Date(a.client_modified);
+    if(s==="old") return new Date(a.client_modified)-new Date(b.client_modified);
+    if(s==="size") return (b.size||0)-(a.size||0);
+    return byName(a,b);
+  });
+
+  const root = $("#content"); root.innerHTML="";
+  if(observer) observer.disconnect();
+  observer = new IntersectionObserver(onVisible, {rootMargin:"400px 0px"});
+
+  if(!fFolders.length && !files.length){
+    root.innerHTML = '<div class="empty">'+(q?"該当するものがありません":"このフォルダにPDFはありません")+'</div>';
+    return;
+  }
+  if(fFolders.length){
+    const lab=el("div","sectionlabel"); lab.textContent="フォルダ ("+fFolders.length+")"; root.appendChild(lab);
+    const g=el("div","grid");
+    fFolders.forEach(f=>g.appendChild(folderCell(f)));
+    root.appendChild(g);
+  }
+  if(files.length){
+    const lab=el("div","sectionlabel"); lab.textContent="本 ("+files.length+")"; root.appendChild(lab);
+    const g=el("div","grid");
+    files.forEach(f=>{ const c=fileCell(f); g.appendChild(c); observer.observe(c); });
+    root.appendChild(g);
+  }
+}
+function folderCell(f){
+  const b=el("button","cell");
+  const cv=el("div","cover folder");
+  cv.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  const nm=el("div","nm"); nm.textContent=f.name;
+  b.append(cv,nm);
+  b.onclick=()=>navigate(f.path_display);
+  return b;
+}
+function fileCell(f){
+  const b=el("button","cell"); b._entry=f;
+  const cv=el("div","cover");
+  const ph=el("div","ph"); ph.textContent=stripExt(f.name); cv.appendChild(ph);
+  const nm=el("div","nm"); nm.textContent=stripExt(f.name);
+  const sb=el("div","sb"); sb.textContent=fmtDate(f.client_modified);
+  b.append(cv,nm,sb);
+  b.onclick=()=>onTapFile(f);
+  return b;
+}
+function onVisible(list){
+  list.forEach(rec=>{
+    if(!rec.isIntersecting) return;
+    const cell = rec.target; observer.unobserve(cell);
+    if(cell._loading) return; cell._loading=true;
+    const cover = cell.querySelector(".cover");
+    enqueue(async ()=>{
+      const sp=el("div","spin"); cover.innerHTML=""; cover.appendChild(sp);
+      let blob=null;
+      try{ blob = await getThumb(cell._entry); }catch(e){}
+      cover.innerHTML="";
+      if(blob){
+        const img=el("img"); img.src=URL.createObjectURL(blob); img.alt="";
+        img.decoding="async"; cover.appendChild(img);
+      }else{
+        const ph=el("div","ph"); ph.textContent=stripExt(cell._entry.name); cover.appendChild(ph);
+      }
+    });
+  });
+}
+
+/* ------------------------------ file actions --------------------------- */
+let sheetEntry=null, sheetBlob=null, sheetLink=null, sheetJob=0;
+
+function openScrim(which){
+  $("#scrim").classList.add("on");
+  which.classList.add("on");
+}
+function closeSheets(){
+  $("#scrim").classList.remove("on");
+  $("#fileSheet").classList.remove("on");
+  $("#setSheet").classList.remove("on");
+}
+$("#scrim").onclick = closeSheets;
+
+function onTapFile(f){
+  if(cfg.tap==="read"){ openReader(f); return; }
+  openFileSheet(f, cfg.tap==="share");
+}
+
+async function openFileSheet(f, autoShare){
+  sheetEntry=f; sheetBlob=null; sheetLink=null;
+  const job = ++sheetJob;
+  $("#fsName").textContent = stripExt(f.name);
+  $("#fsMeta").textContent = fmtSize(f.size||0)+" · "+fmtDate(f.client_modified)+" · "+(f.path_display||"");
+  $("#fsProg").style.width="0%";
+  $("#aShare").disabled = true;
+  $("#aShareSub").textContent = "ファイルを準備中…";
+  $("#aEdge").disabled = true;
+  openScrim($("#fileSheet"));
+
+  // 一時リンク（Edge / Safari 用）— 軽いので先に
+  tempLink(f.path_lower).then(l=>{ if(job!==sheetJob) return; sheetLink=l; $("#aEdge").disabled=false; })
+    .catch(()=>{});
+
+  // 本体ダウンロード（共有シートは実データが要る／タップの直後に同期的に渡す必要があるため先読み）
+  try{
+    const blob = await downloadBlob(f.path_lower, (p)=>{
+      if(job!==sheetJob) return;
+      $("#fsProg").style.width = Math.round(p*100)+"%";
+    });
+    if(job!==sheetJob) return;
+    sheetBlob = blob;
+    $("#fsProg").style.width="100%";
+    $("#aShare").disabled = false;
+    $("#aShareSub").textContent = "共有シートから「GoodNotes」を選択";
+    if(autoShare) doShare();
+  }catch(e){
+    if(job!==sheetJob) return;
+    $("#aShareSub").textContent = "取得に失敗しました（Edge / Safari は使えます）";
+  }
+}
+
+async function doShare(){
+  if(!sheetBlob || !sheetEntry) return;
+  const file = new File([sheetBlob], sheetEntry.name, {type:"application/pdf"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({ files:[file], title: stripExt(sheetEntry.name) });
+      closeSheets();
+    }catch(e){
+      if(e && e.name!=="AbortError") toast("共有できませんでした: "+e.message);
+    }
+  }else{
+    // 共有シートが使えない環境 → ダウンロードにフォールバック
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(sheetBlob); a.download=sheetEntry.name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 20000);
+    toast("この環境では共有シートが使えないため保存しました");
+  }
+}
+$("#aShare").onclick = doShare;
+
+$("#aEdge").onclick = ()=>{
+  if(!sheetLink) return;
+  const stripped = sheetLink.replace(/^https?:\/\//,"");
+  location.href = "microsoft-edge-https://" + stripped;
+  setTimeout(()=>{ toast("Edgeが開かない場合は「Safariの新規タブ」をお試しください", 3600); }, 1400);
+};
+$("#aSafari").onclick = ()=>{ if(sheetLink) window.open(sheetLink, "_blank", "noopener"); };
+$("#aRead").onclick = ()=>{ const f=sheetEntry; closeSheets(); openReader(f, sheetBlob); };
+
+/* -------------------------------- reader ------------------------------- */
+let readerDoc=null, readerJob=0;
+async function openReader(f, preBlob){
+  const job = ++readerJob;
+  $("#reader").classList.add("on");
+  $("#rTitle").textContent = stripExt(f.name);
+  $("#rPageInfo").textContent = "読み込み中…";
+  $("#rpages").innerHTML="";
+  try{
+    let src;
+    if(preBlob) src = { data: await preBlob.arrayBuffer() };
+    else src = { url: await tempLink(f.path_lower), disableAutoFetch:true, disableStream:false, rangeChunkSize:131072 };
+    src.isEvalSupported = false;
+    const doc = await pdfjsLib.getDocument(src).promise;
+    if(job!==readerJob){ doc.destroy(); return; }
+    readerDoc = doc;
+    $("#rPageInfo").textContent = doc.numPages + "ページ";
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    const width = Math.min($("#rpages").clientWidth, 900);
+    for(let i=1;i<=doc.numPages;i++){
+      const cv=document.createElement("canvas");
+      $("#rpages").appendChild(cv);
+      const io = new IntersectionObserver(async (recs, ob)=>{
+        if(!recs[0].isIntersecting) return;
+        ob.disconnect();
+        if(job!==readerJob) return;
+        try{
+          const page = await doc.getPage(i);
+          const base = page.getViewport({scale:1});
+          const scale = (width/base.width)*dpr;
+          const vp = page.getViewport({scale});
+          cv.width=Math.ceil(vp.width); cv.height=Math.ceil(vp.height);
+          await page.render({canvasContext:cv.getContext("2d"), viewport:vp}).promise;
+        }catch(e){}
+      }, {rootMargin:"800px 0px"});
+      // プレースホルダ高さ（A4想定）
+      cv.width = Math.ceil(width*dpr); cv.height = Math.ceil(width*1.414*dpr);
+      io.observe(cv);
+    }
+  }catch(e){
+    $("#rPageInfo").textContent = "";
+    $("#rpages").innerHTML = '<div class="empty" style="color:#ddd">開けませんでした<br>'+escapeHtml(e.message)+'</div>';
+  }
+}
+$("#rClose").onclick = ()=>{
+  readerJob++;
+  $("#reader").classList.remove("on");
+  $("#rpages").innerHTML="";
+  if(readerDoc){ try{readerDoc.destroy();}catch(e){} readerDoc=null; }
+};
+
+/* ------------------------------- settings UI --------------------------- */
+function openSettings(){
+  $("#fKey").value = cfg.appKey||"";
+  $("#fRoot").value = cfg.root||"";
+  $("#fRedirect").textContent = redirectUri();
+  seg("#segDensity", String(cfg.density));
+  seg("#segTap", cfg.tap);
+  seg("#segTheme", cfg.theme);
+  $("#acctLine").textContent = isAuthed() ? "接続済み" : "未接続";
+  if(isAuthed()){
+    rpc("users/get_current_account").then(a=>{
+      $("#acctLine").textContent = "接続済み: "+(a.name&&a.name.display_name||"")+" ("+(a.email||"")+")";
+    }).catch(()=>{});
+  }
+  openScrim($("#setSheet"));
+}
+function seg(sel, val){
+  document.querySelectorAll(sel+" button").forEach(b=>{
+    b.setAttribute("aria-pressed", String(b.dataset.v===val));
+  });
+}
+document.querySelectorAll("#segDensity button").forEach(b=>b.onclick=()=>{ cfg.density=+b.dataset.v; seg("#segDensity", b.dataset.v); saveCfg(); });
+document.querySelectorAll("#segTap button").forEach(b=>b.onclick=()=>{ cfg.tap=b.dataset.v; seg("#segTap", b.dataset.v); saveCfg(); });
+document.querySelectorAll("#segTheme button").forEach(b=>b.onclick=()=>{ cfg.theme=b.dataset.v; seg("#segTheme", b.dataset.v); saveCfg(); });
+
+$("#btnSettings").onclick = openSettings;
+$("#btnCopy").onclick = async ()=>{
+  try{ await navigator.clipboard.writeText(redirectUri()); toast("コピーしました"); }
+  catch(e){ toast("手動でコピーしてください"); }
+};
+$("#btnSave").onclick = ()=>{
+  cfg.appKey = $("#fKey").value.trim();
+  cfg.root   = $("#fRoot").value.trim();
+  saveCfg(); closeSheets();
+  if(isAuthed()) navigate(rootPath());
+  else showAuthWall();
+};
+$("#btnConnect").onclick = ()=>{
+  cfg.appKey = $("#fKey").value.trim();
+  cfg.root   = $("#fRoot").value.trim();
+  saveCfg(); beginAuth();
+};
+$("#btnClearCache").onclick = async ()=>{ await idbClear(); toast("表紙キャッシュを消しました"); if(isAuthed()) navigate(curPath==null?rootPath():curPath, false); };
+$("#btnLogout").onclick = ()=>{ tok={access:null,exp:0,refresh:null}; saveTok(); closeSheets(); showAuthWall(); };
+
+$("#btnUp").onclick = ()=>{
+  const p = curPath.slice(0, curPath.lastIndexOf("/"));
+  navigate(p.length < rootPath().length ? rootPath() : p);
+};
+$("#btnReload").onclick = ()=>navigate(curPath==null?rootPath():curPath, false);
+$("#sort").onchange = ()=>{ cfg.sort=$("#sort").value; saveCfg(); render(); };
+let qTimer=null;
+$("#q").oninput = ()=>{ clearTimeout(qTimer); qTimer=setTimeout(render, 160); };
+
+window.addEventListener("popstate", (ev)=>{
+  const p = (ev.state && ev.state.path) || (location.hash ? decodeURIComponent(location.hash.slice(1)) : rootPath());
+  navigate(p, false);
+});
+
+/* -------------------------------- boot --------------------------------- */
+function showAuthWall(){
+  $("#content").innerHTML =
+    '<div class="empty">' +
+    (cfg.appKey ? "Dropboxに接続されていません。" : "はじめに Dropbox の App key を設定してください。") +
+    '<br><br><button class="btn" id="wallBtn">設定を開く</button></div>';
+  const b=$("#wallBtn"); if(b) b.onclick=openSettings;
+  $("#crumbs").innerHTML="";
+}
+
+(async function boot(){
+  applyCfg();
+  const params = new URLSearchParams(location.search);
+  if(params.get("error")){
+    history.replaceState({}, "", redirectUri());
+    toast("Dropboxの認証がキャンセルされました");
+  }
+  const code = params.get("code");
+  if(code){
+    $("#content").innerHTML='<div class="empty">Dropboxに接続中…</div>';
+    try{
+      await exchangeCode(code);
+      history.replaceState({}, "", redirectUri());
+      toast("接続しました");
+    }catch(e){
+      history.replaceState({}, "", redirectUri());
+      $("#content").innerHTML='<div class="empty">'+escapeHtml(e.message)+'</div>';
+      return;
+    }
+  }
+  if(!cfg.appKey || !isAuthed()){ showAuthWall(); if(!cfg.appKey) openSettings(); return; }
+  const start = location.hash ? decodeURIComponent(location.hash.slice(1)) : rootPath();
+  navigate(start, false);
+})();
+
+})();
+</script>
+</body>
+</html>
