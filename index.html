@@ -35,7 +35,7 @@
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
     overscroll-behavior-y:none;
   }
-  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
   input,select{font:inherit;color:inherit}
 
   /* ---------- header ---------- */
@@ -67,7 +67,7 @@
     grid-template-columns:repeat(auto-fill, minmax(var(--cover-w), 1fr));
     align-items:start;
   }
-  .cell{display:flex; flex-direction:column; gap:5px; text-align:left; padding:0}
+  .cell{display:flex; flex-direction:column; gap:5px; text-align:left; padding:0; -webkit-user-select:none; user-select:none}
   .cover{
     position:relative; width:100%; aspect-ratio:1/1.414; border-radius:var(--radius);
     background:var(--panel); box-shadow:var(--shadow); overflow:hidden;
@@ -75,6 +75,8 @@
   }
   .cell:active .cover{transform:scale(.965)}
   .cover img{width:100%;height:100%;object-fit:cover;display:block}
+  .cover .badge{position:absolute;left:5px;top:5px;background:rgba(0,0,0,.6);color:#fff;font-size:9px;
+    padding:2px 5px;border-radius:5px;letter-spacing:.04em;font-weight:700;pointer-events:none}
   .cover .ph{font-size:11px;color:var(--sub);padding:8px;text-align:center;line-height:1.35;word-break:break-all;
     display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
   .cover.folder{aspect-ratio:1/0.78; background:linear-gradient(160deg, color-mix(in srgb,var(--accent) 22%, var(--panel)), var(--panel));
@@ -95,13 +97,14 @@
     position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--panel);
     border-radius:16px 16px 0 0; box-shadow:0 -8px 40px rgba(0,0,0,.28);
     transform:translateY(102%); transition:transform .22s cubic-bezier(.32,.72,0,1);
+    pointer-events:none; visibility:hidden;
     padding:10px 16px calc(18px + env(safe-area-inset-bottom)); max-height:88vh; overflow:auto;
   }
-  .sheet.on{transform:none}
+  .sheet.on{transform:none; pointer-events:auto; visibility:visible}
   @media (min-width:700px){
     .sheet{left:50%; right:auto; bottom:auto; top:50%; width:520px; max-width:92vw; border-radius:16px;
       transform:translate(-50%,-46%) scale(.97); opacity:0; transition:opacity .16s, transform .16s}
-    .sheet.on{transform:translate(-50%,-50%); opacity:1}
+    .sheet.on{transform:translate(-50%,-50%); opacity:1; pointer-events:auto; visibility:visible}
   }
   .grip{width:38px;height:4px;border-radius:2px;background:var(--line);margin:2px auto 12px}
   @media (min-width:700px){.grip{display:none}}
@@ -192,7 +195,7 @@
   <div class="prog"><i id="fsProg"></i></div>
   <button class="act primary" id="aShare">
     <span class="ai"><svg viewBox="0 0 24 24"><path d="M12 16V3"/><path d="M8 7l4-4 4 4"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span>
-    <span><span class="at">GoodNotesへ送る</span><span class="as" id="aShareSub">共有シートから「GoodNotes」を選択</span></span>
+    <span><span class="at" id="aShareTitle">GoodNotesへ送る</span><span class="as" id="aShareSub">共有シートから「GoodNotes」を選択</span></span>
   </button>
   <button class="act" id="aEdge">
     <span class="ai"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></span>
@@ -200,7 +203,11 @@
   </button>
   <button class="act" id="aRead">
     <span class="ai"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5z"/></svg></span>
-    <span><span class="at">このアプリで読む</span><span class="as">外部アプリを開かずその場で閲覧</span></span>
+    <span><span class="at" id="aReadTitle">このアプリで読む</span><span class="as">外部アプリを開かずその場で閲覧</span></span>
+  </button>
+  <button class="act" id="aOrig" hidden>
+    <span class="ai"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg></span>
+    <span><span class="at">元の画像のまま送る</span><span class="as">変換せずJPEG/PNGのまま共有シートへ</span></span>
   </button>
   <button class="act" id="aSafari">
     <span class="ai"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></span>
@@ -303,6 +310,11 @@ if (window.pdfjsLib) {
 /* ----------------------------- tiny helpers ---------------------------- */
 const $  = (s)=>document.querySelector(s);
 const el = (t,c)=>{const e=document.createElement(t); if(c)e.className=c; return e;};
+const IMG_RE = /\.(jpe?g|png|heic|heif|gif|webp|tiff?|bmp)$/i;
+const PDF_RE = /\.pdf$/i;
+const isImg = (n)=>IMG_RE.test(n);
+const isPdf = (n)=>PDF_RE.test(n);
+const isShown = (n)=>isPdf(n)||isImg(n);
 const fmtSize = (b)=> b<1024?b+" B": b<1048576?(b/1024).toFixed(0)+" KB": (b/1048576).toFixed(1)+" MB";
 const fmtDate = (s)=>{ try{const d=new Date(s); return d.getFullYear()+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getDate()).padStart(2,"0");}catch(e){return "";} };
 let toastTimer=null;
@@ -526,9 +538,81 @@ async function getThumb(entry){
   const cached = await idbGet(key);
   if(cached) return cached;
   let blob = await dropboxThumb(entry.path_lower);
-  if(!blob) blob = await renderFirstPage(entry.path_lower);
+  if(!blob){
+    if(isPdf(entry.name)) blob = await renderFirstPage(entry.path_lower);
+    else {
+      try{ blob = (await rasterize(await downloadBlob(entry.path_lower), 420, 0.82)).blob; }
+      catch(e){ blob = null; }
+    }
+  }
   if(blob) idbPut(key, blob);
   return blob;
+}
+
+/* --------------------- image → PDF (依存ライブラリなし) ------------------ */
+function loadImage(blob){
+  return new Promise((res,rej)=>{
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = ()=>res(im);
+    im.onerror = ()=>{ URL.revokeObjectURL(url); rej(new Error("画像を読み込めませんでした")); };
+    im.src = url;
+  });
+}
+async function rasterize(blob, maxDim, quality){
+  const im = await loadImage(blob);
+  const iw = im.naturalWidth||im.width, ih = im.naturalHeight||im.height;
+  const sc = Math.min(1, maxDim/Math.max(iw,ih));
+  const w = Math.max(1, Math.round(iw*sc)), h = Math.max(1, Math.round(ih*sc));
+  const cv = document.createElement("canvas"); cv.width=w; cv.height=h;
+  const g = cv.getContext("2d");
+  g.fillStyle="#fff"; g.fillRect(0,0,w,h);
+  g.drawImage(im, 0, 0, w, h);
+  try{ URL.revokeObjectURL(im.src); }catch(e){}
+  const out = await new Promise((r)=>cv.toBlob(r, "image/jpeg", quality||0.85));
+  return { blob: out, w, h };
+}
+// JPEG を1枚だけ埋め込んだ最小構成のPDFを組み立てる（A4に収める）
+function buildPdfFromJpeg(jpeg, w, h){
+  const enc = (str)=>new TextEncoder().encode(str);
+  const parts=[]; let len=0;
+  const push=(u8)=>{ parts.push(u8); len+=u8.length; };
+  const off=[0,0,0,0,0,0];
+  const obj=(n, dict, stream)=>{
+    off[n]=len;
+    push(enc(n+" 0 obj\n"+dict+"\n"));
+    if(stream){ push(enc("stream\n")); push(stream); push(enc("\nendstream\n")); }
+    push(enc("endobj\n"));
+  };
+  const A=[595.28, 841.89];
+  const portrait = h >= w;
+  const pw = portrait?A[0]:A[1], ph = portrait?A[1]:A[0];
+  const sc = Math.min(pw/w, ph/h);
+  const dw = w*sc, dh = h*sc, ox=(pw-dw)/2, oy=(ph-dh)/2;
+  const r2=(x)=>Math.round(x*100)/100;
+
+  push(enc("%PDF-1.4\n"));
+  push(new Uint8Array([0x25,0xE2,0xE3,0xCF,0xD3,0x0A]));
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  obj(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+r2(pw)+" "+r2(ph)+"] "+
+         "/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>");
+  const cs = enc("q "+r2(dw)+" 0 0 "+r2(dh)+" "+r2(ox)+" "+r2(oy)+" cm /Im0 Do Q");
+  obj(4, "<< /Length "+cs.length+" >>", cs);
+  obj(5, "<< /Type /XObject /Subtype /Image /Width "+w+" /Height "+h+
+         " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+jpeg.length+" >>", jpeg);
+
+  const xref = len;
+  let x = "xref\n0 6\n0000000000 65535 f \n";
+  for(let i=1;i<=5;i++) x += String(off[i]).padStart(10,"0")+" 00000 n \n";
+  x += "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF\n";
+  push(enc(x));
+  return new Blob(parts, {type:"application/pdf"});
+}
+async function imageToPdf(blob){
+  const r = await rasterize(blob, 2400, 0.9);
+  const bytes = new Uint8Array(await r.blob.arrayBuffer());
+  return buildPdfFromJpeg(bytes, r.w, r.h);
 }
 
 /* thumbnail work queue (同時実行を絞ってiPadを詰まらせない) */
@@ -554,7 +638,8 @@ function rootPath(){
   return p.replace(/\/+$/,"");
 }
 function baseName(p){ const i=p.lastIndexOf("/"); return i<0?p:p.slice(i+1); }
-function stripExt(n){ return n.replace(/\.pdf$/i,""); }
+function stripExt(n){ return n.replace(/\.(pdf|jpe?g|png|heic|heif|gif|webp|tiff?|bmp)$/i,""); }
+function extOf(n){ const m=n.match(/\.([^.]+)$/); return m?m[1].toUpperCase():""; }
 
 async function navigate(path, push){
   curPath = path;
@@ -594,7 +679,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({"&":"&amp;",
 function render(){
   const q = $("#q").value.trim().toLowerCase();
   const folders = curEntries.filter(e=>e[".tag"]==="folder");
-  let files = curEntries.filter(e=>e[".tag"]==="file" && /\.pdf$/i.test(e.name));
+  let files = curEntries.filter(e=>e[".tag"]==="file" && isShown(e.name));
 
   const fFolders = q ? folders.filter(f=>f.name.toLowerCase().includes(q)) : folders;
   if(q) files = files.filter(f=>f.name.toLowerCase().includes(q));
@@ -624,7 +709,7 @@ function render(){
     root.appendChild(g);
   }
   if(files.length){
-    const lab=el("div","sectionlabel"); lab.textContent="本 ("+files.length+")"; root.appendChild(lab);
+    const lab=el("div","sectionlabel"); lab.textContent="本・資料 ("+files.length+")"; root.appendChild(lab);
     const g=el("div","grid");
     files.forEach(f=>{ const c=fileCell(f); g.appendChild(c); observer.observe(c); });
     root.appendChild(g);
@@ -663,6 +748,9 @@ function onVisible(list){
       if(blob){
         const img=el("img"); img.src=URL.createObjectURL(blob); img.alt="";
         img.decoding="async"; cover.appendChild(img);
+        if(isImg(cell._entry.name)){
+          const bg=el("div","badge"); bg.textContent=extOf(cell._entry.name); cover.appendChild(bg);
+        }
       }else{
         const ph=el("div","ph"); ph.textContent=stripExt(cell._entry.name); cover.appendChild(ph);
       }
@@ -671,7 +759,7 @@ function onVisible(list){
 }
 
 /* ------------------------------ file actions --------------------------- */
-let sheetEntry=null, sheetBlob=null, sheetLink=null, sheetJob=0;
+let sheetEntry=null, sheetOrig=null, sheetShare=null, sheetLink=null, sheetJob=0;
 
 function openScrim(which){
   $("#scrim").classList.add("on");
@@ -690,31 +778,52 @@ function onTapFile(f){
 }
 
 async function openFileSheet(f, autoShare){
-  sheetEntry=f; sheetBlob=null; sheetLink=null;
+  sheetEntry=f; sheetOrig=null; sheetShare=null; sheetLink=null;
+  const img = isImg(f.name);
   const job = ++sheetJob;
   $("#fsName").textContent = stripExt(f.name);
   $("#fsMeta").textContent = fmtSize(f.size||0)+" · "+fmtDate(f.client_modified)+" · "+(f.path_display||"");
   $("#fsProg").style.width="0%";
   $("#aShare").disabled = true;
+  $("#aShareTitle").textContent = img ? "GoodNotesへ送る（PDFに変換）" : "GoodNotesへ送る";
   $("#aShareSub").textContent = "ファイルを準備中…";
+  $("#aReadTitle").textContent = img ? "このアプリで表示" : "このアプリで読む";
+  $("#aOrig").hidden = !img;
+  $("#aOrig").disabled = true;
   $("#aEdge").disabled = true;
   openScrim($("#fileSheet"));
 
   // 一時リンク（Edge / Safari 用）— 軽いので先に
-  tempLink(f.path_lower).then(l=>{ if(job!==sheetJob) return; sheetLink=l; $("#aEdge").disabled=false; })
+  tempLink(f.path_lower).then((l)=>{ if(job!==sheetJob) return; sheetLink=l; $("#aEdge").disabled=false; })
     .catch(()=>{});
 
-  // 本体ダウンロード（共有シートは実データが要る／タップの直後に同期的に渡す必要があるため先読み）
+  // 本体ダウンロード（共有シートは実データが要る／タップ直後に同期的に渡す必要があるため先読み）
   try{
-    const blob = await downloadBlob(f.path_lower, (p)=>{
+    const blob = await downloadBlob(f.path_lower, (pr)=>{
       if(job!==sheetJob) return;
-      $("#fsProg").style.width = Math.round(p*100)+"%";
+      $("#fsProg").style.width = Math.round(pr*(img?85:100))+"%";
     });
     if(job!==sheetJob) return;
-    sheetBlob = blob;
+    sheetOrig = blob;
+    $("#aOrig").disabled = false;
+    if(img){
+      $("#aShareSub").textContent = "PDFに変換中…";
+      try{
+        const pdf = await imageToPdf(blob);
+        if(job!==sheetJob) return;
+        sheetShare = { blob: pdf, name: stripExt(f.name)+".pdf" };
+        $("#aShareSub").textContent = "PDFに変換済み — 共有シートで「GoodNotes」を選択";
+      }catch(e){
+        if(job!==sheetJob) return;
+        sheetShare = { blob: blob, name: f.name };
+        $("#aShareSub").textContent = "変換できなかったため画像のまま送ります";
+      }
+    }else{
+      sheetShare = { blob: blob, name: f.name };
+      $("#aShareSub").textContent = "共有シートから「GoodNotes」を選択";
+    }
     $("#fsProg").style.width="100%";
     $("#aShare").disabled = false;
-    $("#aShareSub").textContent = "共有シートから「GoodNotes」を選択";
     if(autoShare) doShare();
   }catch(e){
     if(job!==sheetJob) return;
@@ -722,25 +831,27 @@ async function openFileSheet(f, autoShare){
   }
 }
 
-async function doShare(){
-  if(!sheetBlob || !sheetEntry) return;
-  const file = new File([sheetBlob], sheetEntry.name, {type:"application/pdf"});
+async function doShare(payload){
+  const p = payload || sheetShare;
+  if(!p || !p.blob) return;
+  const type = p.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : (p.blob.type || "application/octet-stream");
+  const file = new File([p.blob], p.name, {type});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{
-      await navigator.share({ files:[file], title: stripExt(sheetEntry.name) });
+      await navigator.share({ files:[file] });
       closeSheets();
     }catch(e){
       if(e && e.name!=="AbortError") toast("共有できませんでした: "+e.message);
     }
   }else{
-    // 共有シートが使えない環境 → ダウンロードにフォールバック
     const a=document.createElement("a");
-    a.href=URL.createObjectURL(sheetBlob); a.download=sheetEntry.name; a.click();
+    a.href=URL.createObjectURL(p.blob); a.download=p.name; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href), 20000);
     toast("この環境では共有シートが使えないため保存しました");
   }
 }
-$("#aShare").onclick = doShare;
+$("#aShare").onclick = ()=>doShare();
+$("#aOrig").onclick = ()=>{ if(sheetOrig && sheetEntry) doShare({blob:sheetOrig, name:sheetEntry.name}); };
 
 $("#aEdge").onclick = ()=>{
   if(!sheetLink) return;
@@ -749,7 +860,7 @@ $("#aEdge").onclick = ()=>{
   setTimeout(()=>{ toast("Edgeが開かない場合は「Safariの新規タブ」をお試しください", 3600); }, 1400);
 };
 $("#aSafari").onclick = ()=>{ if(sheetLink) window.open(sheetLink, "_blank", "noopener"); };
-$("#aRead").onclick = ()=>{ const f=sheetEntry; closeSheets(); openReader(f, sheetBlob); };
+$("#aRead").onclick = ()=>{ const f=sheetEntry, b=sheetOrig; closeSheets(); openReader(f, b); };
 
 /* -------------------------------- reader ------------------------------- */
 let readerDoc=null, readerJob=0;
@@ -759,6 +870,21 @@ async function openReader(f, preBlob){
   $("#rTitle").textContent = stripExt(f.name);
   $("#rPageInfo").textContent = "読み込み中…";
   $("#rpages").innerHTML="";
+  if(isImg(f.name)){
+    try{
+      const blob = preBlob || await downloadBlob(f.path_lower);
+      if(job!==readerJob) return;
+      const im = document.createElement("img");
+      im.src = URL.createObjectURL(blob);
+      im.style.cssText = "max-width:min(100%,900px);width:auto;height:auto;display:block;margin:0 auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.4)";
+      $("#rpages").innerHTML=""; $("#rpages").appendChild(im);
+      $("#rPageInfo").textContent = extOf(f.name);
+    }catch(e){
+      $("#rPageInfo").textContent="";
+      $("#rpages").innerHTML = '<div class="empty" style="color:#ddd">開けませんでした<br>'+escapeHtml(e.message)+'</div>';
+    }
+    return;
+  }
   try{
     let src;
     if(preBlob) src = { data: await preBlob.arrayBuffer() };
