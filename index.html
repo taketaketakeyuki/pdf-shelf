@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -8,6 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Shelf">
 <meta name="theme-color" content="#f6f4f0">
 <title>PDF Shelf</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <style>
   :root{
     --bg:#f6f4f0; --panel:#ffffff; --ink:#1c1b19; --sub:#6f6a63;
@@ -29,6 +32,7 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
+  [inert]{pointer-events:none!important}
   html,body{margin:0;padding:0;height:100%}
   body{
     background:var(--bg); color:var(--ink);
@@ -159,7 +163,7 @@
     <button class="iconbtn" id="btnUp" hidden aria-label="上へ">
       <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
-    <div class="title"><span id="hTitle">PDF Shelf</span></div>
+    <div class="title"><span id="hTitle">PDF Shelf</span><span id="hVer" style="font-size:10px;color:var(--sub);font-weight:400;flex:none"></span></div>
     <button class="iconbtn" id="btnReload" aria-label="再読み込み">
       <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
     </button>
@@ -218,8 +222,9 @@
 <!-- ============ settings sheet ============ -->
 <div class="sheet" id="setSheet" role="dialog" aria-modal="true">
   <div class="grip"></div>
-  <h2>設定</h2>
+  <h2>設定 <span id="setVer" style="font-size:12px;color:var(--sub);font-weight:400"></span></h2>
   <div class="meta" id="acctLine">未接続</div>
+  <div class="meta" id="shareCap" style="margin-top:-10px"></div>
 
   <div class="field">
     <label>Dropbox アプリキー (App key)</label>
@@ -324,6 +329,7 @@ function toast(msg, ms){
 }
 
 /* ------------------------------ settings ------------------------------- */
+const APP_VERSION = "1.2";
 const CFG_KEY="pdfshelf.cfg.v1", TOK_KEY="pdfshelf.tok.v1";
 const defCfg={ appKey:"", root:"", density:118, tap:"sheet", theme:"auto", sort:"name" };
 let cfg = Object.assign({}, defCfg, readJson(CFG_KEY) || {});
@@ -761,14 +767,27 @@ function onVisible(list){
 /* ------------------------------ file actions --------------------------- */
 let sheetEntry=null, sheetOrig=null, sheetShare=null, sheetLink=null, sheetJob=0;
 
+function setSheetOpen(sheet, on){
+  if(on){
+    sheet.classList.add("on");
+    sheet.removeAttribute("inert");
+    sheet.removeAttribute("aria-hidden");
+  }else{
+    sheet.classList.remove("on");
+    sheet.setAttribute("inert","");
+    sheet.setAttribute("aria-hidden","true");
+  }
+}
 function openScrim(which){
+  // 開くシート以外は必ず不活性にする
+  [$("#fileSheet"), $("#setSheet")].forEach((sh)=>setSheetOpen(sh, sh===which));
   $("#scrim").classList.add("on");
-  which.classList.add("on");
 }
 function closeSheets(){
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
   $("#scrim").classList.remove("on");
-  $("#fileSheet").classList.remove("on");
-  $("#setSheet").classList.remove("on");
+  setSheetOpen($("#fileSheet"), false);
+  setSheetOpen($("#setSheet"), false);
 }
 $("#scrim").onclick = closeSheets;
 
@@ -841,7 +860,12 @@ async function doShare(payload){
       await navigator.share({ files:[file] });
       closeSheets();
     }catch(e){
-      if(e && e.name!=="AbortError") toast("共有できませんでした: "+e.message);
+      if(!e || e.name==="AbortError") return;           // ユーザーが共有シートを閉じただけ
+      if(e.name==="NotAllowedError"){
+        toast("共有シートが開けませんでした。もう一度ボタンを押すか「Safariの新規タブで開く」をお使いください", 4200);
+      }else{
+        toast("共有できませんでした: "+(e.message||e.name), 4200);
+      }
     }
   }else{
     const a=document.createElement("a");
@@ -936,6 +960,8 @@ function openSettings(){
   seg("#segDensity", String(cfg.density));
   seg("#segTap", cfg.tap);
   seg("#segTheme", cfg.theme);
+  const shareOk = !!(navigator.canShare && navigator.share);
+  $("#shareCap").textContent = shareOk ? "共有シート: 利用可能" : "共有シート: この環境では使えません（ダウンロード動作になります）";
   $("#acctLine").textContent = isAuthed() ? "接続済み" : "未接続";
   if(isAuthed()){
     rpc("users/get_current_account").then(a=>{
@@ -998,6 +1024,11 @@ function showAuthWall(){
 }
 
 (async function boot(){
+  // 起動時点で両シートを不活性化（透明なまま前面に残るのを防ぐ二重の保険）
+  setSheetOpen($("#fileSheet"), false);
+  setSheetOpen($("#setSheet"), false);
+  $("#hVer").textContent = "v"+APP_VERSION;
+  $("#setVer").textContent = "v"+APP_VERSION;
   applyCfg();
   const params = new URLSearchParams(location.search);
   if(params.get("error")){
